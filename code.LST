@@ -1,0 +1,265 @@
+C51 COMPILER V9.01   CODE                                                                  02/14/2019 20:02:15 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE CODE
+OBJECT MODULE PLACED IN code.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE code.c OMF2 BROWSE DEBUG
+
+line level    source
+
+   1                                                                                                                          #include <REGX52.H>
+   2          #include <stdio.h>
+   3          
+   4          #define DQ P3_7
+   5          #define led P2_2
+   6          #define chuong P2_3
+   7          int check_ok,delay_ok,check_data,ghi_chuong,ghi_temp,alert,max_temp,temp,k,check_send;
+   8          unsigned char a;
+   9          
+  10          //-------------------------------------------------------------
+  11          void delay_ms(int t)
+  12          {
+  13   1              unsigned int i;
+  14   1              unsigned char j;
+  15   1              for(i=0;i<t;i++)
+  16   1                      for(j=0;j<140;j++);
+  17   1      }
+  18          void delay_us(int us)
+  19          {
+  20   1              int i;
+  21   1              for (i=0; i<us; i++);
+  22   1      }
+  23          
+  24          void delay(int time)
+  25          {
+  26   1              while(time--);
+  27   1      }
+  28          //----------------------------------------
+  29          // Reset DS1820
+  30          //----------------------------------------
+  31          bit ResetDS1820(void)
+  32          {
+  33   1              bit presence;
+  34   1              DQ = 0;                 //pull DQ line low
+  35   1              delay_us(29);   // leave it low for about 490us
+  36   1              DQ = 1;                 // allow line to return high
+  37   1              delay_us(3);    // wait for presence 55 uS
+  38   1              presence = DQ;  // get presence signal
+  39   1              delay_us(25);   // wait for end of timeslot 316 uS 
+  40   1              return(presence); // presence signal returned
+  41   1      }       // 0=presence, 1 = no part
+  42          
+  43          //-----------------------------------------
+  44          // Read one bit from DS1820
+  45          //-----------------------------------------
+  46          unsigned char ReadBit(void)
+  47          {
+  48   1              unsigned char i;
+  49   1              DQ = 0;         // pull DQ low to start timeslot
+  50   1              DQ=1;
+  51   1              for (i=0; i<3; i++); // delay 17 us from start of timeslot
+  52   1              return(DQ); // return value of DQ line
+  53   1      }
+  54          
+  55          //-----------------------------------------
+C51 COMPILER V9.01   CODE                                                                  02/14/2019 20:02:15 PAGE 2   
+
+  56          // Write one bit to DS1820
+  57          //-----------------------------------------
+  58          void WriteBit(char bitval)
+  59          {
+  60   1              DQ=0;   
+  61   1              if(bitval==1)
+  62   1                      DQ = 1;
+  63   1              delay_us(5);                    // delay about 39 uS
+  64   1              DQ = 1;
+  65   1      }
+  66          
+  67          //-----------------------------------------
+  68          // Read 1 byte from DS1820
+  69          //-----------------------------------------
+  70          unsigned char ReadByte(void)
+  71          {
+  72   1              unsigned char i;
+  73   1              unsigned char value = 0;
+  74   1              for (i=0;i<8;i++)
+  75   1              {
+  76   2                      if(ReadBit()) value|=0x01<<i;
+  77   2                      delay_us(6); 
+  78   2              }
+  79   1              return(value);
+  80   1      }
+  81          //-----------------------------------------
+  82          // Write 1 byte
+  83          //-----------------------------------------
+  84          void WriteByte(char val)
+  85          {
+  86   1              unsigned char i;
+  87   1              unsigned char temp;
+  88   1              for (i=0; i<8; i++) // writes byte, one bit at a time
+  89   1              {              
+  90   2                      temp = val>> i;
+  91   2                      temp &=0x01;
+  92   2                      WriteBit(temp);
+  93   2              }
+  94   1              delay_us(5);
+  95   1      }
+  96          
+  97          //-----------------------------------------
+  98          // Read temperature
+  99          //-----------------------------------------
+ 100          void ReadTemp(void)
+ 101          {
+ 102   1              EA=0;
+ 103   1              ResetDS1820();
+ 104   1          WriteByte(0xcc);  // skip ROM
+ 105   1          WriteByte(0x44);  // perform temperatur conversion
+ 106   1          delay_ms(700);      
+ 107   1          ResetDS1820();
+ 108   1          WriteByte(0xcc);  // skip ROM
+ 109   1          WriteByte(0xbe);  // read the result
+ 110   1          temp = ReadByte();
+ 111   1              temp = (ReadByte() << 8)+temp;
+ 112   1              temp = temp >> 4;
+ 113   1              EA=1;
+ 114   1      }
+ 115          void nhandulieu() interrupt 4
+ 116          {
+ 117   1              if(RI)
+C51 COMPILER V9.01   CODE                                                                  02/14/2019 20:02:15 PAGE 3   
+
+ 118   1              {
+ 119   2                      a =SBUF;
+ 120   2                      if(ghi_chuong)                                  // Ghi lai trang thai chuong
+ 121   2                      {
+ 122   3                              alert = a-48;
+ 123   3                              ghi_chuong = 0;
+ 124   3                      }
+ 125   2                      else ghi_chuong = 0;
+ 126   2                      if(ghi_temp==1&&k==0)                   // Ghi lai max temp
+ 127   2                      {
+ 128   3                              max_temp = (a-48)*10;
+ 129   3                              k=1;
+ 130   3                      }
+ 131   2                      else if(ghi_temp==1&&k==1)
+ 132   2                      {
+ 133   3                              max_temp = max_temp + (a -48);
+ 134   3                              ghi_temp = 0;
+ 135   3                      }
+ 136   2                      else
+ 137   2                      {
+ 138   3                              k=0;
+ 139   3                              ghi_temp=0;
+ 140   3                      } 
+ 141   2                      if(a=='T'&&check_data == 1) ghi_temp = 1;
+ 142   2                      if(a=='C'&&check_data == 1) ghi_chuong = 1;
+ 143   2                      if(a=='O') check_ok = 1;                                // Check OK
+ 144   2                      else if(a=='K'&&check_ok == 1) delay_ok = 1;
+ 145   2                      else if(a!='K'&&check_ok == 1) check_ok = 0;
+ 146   2                      else check_ok = 0;
+ 147   2                      if(a==63) check_data = 1;                               // Check temp max va chuong       ?=63
+ 148   2                      else check_data = 0;
+ 149   2                      if(a=='>') check_send = 1;
+ 150   2                      else check_send = 0;
+ 151   2                      if(temp>max_temp&&alert==1) chuong = 1;
+ 152   2                      else if(temp<=max_temp||alert==0) chuong = 0;
+ 153   2              }
+ 154   1              RI=0;
+ 155   1      }
+ 156          int check()
+ 157          {
+ 158   1              int i=400000;
+ 159   1              delay_ok=0;
+ 160   1              while(!delay_ok)
+ 161   1              {
+ 162   2                      i--;
+ 163   2                      if(!i) break;
+ 164   2              }
+ 165   1              if(i) return 1;
+ 166   1              else return 0;
+ 167   1      }
+ 168          int check_s()
+ 169          {
+ 170   1              int i=40000000;
+ 171   1              check_send=0;
+ 172   1              while(!check_send)
+ 173   1              {
+ 174   2                      i--;
+ 175   2                      if(!i) break;
+ 176   2              }
+ 177   1              if(i) return 1;
+ 178   1              else return 0;
+ 179   1      }
+C51 COMPILER V9.01   CODE                                                                  02/14/2019 20:02:15 PAGE 4   
+
+ 180          //*********Ham CHinh*************//
+ 181          void main()
+ 182          {
+ 183   1              SM0=0;SM1=1;
+ 184   1              TMOD=0x20;
+ 185   1              TH1=0xFD;
+ 186   1              TR1=1;
+ 187   1              TI=1;
+ 188   1              REN=1;
+ 189   1              IE=0x90;        // Cho phep ngat truyen thong noi tiep
+ 190   1              delay_ok=0;
+ 191   1              chuong = 0;
+ 192   1              alert = 1;
+ 193   1              max_temp = 50;
+ 194   1              do ReadTemp();
+ 195   1              while(temp!=85);
+ 196   1              delay(1000);
+ 197   1              start: led =1 ; delay(1000); led = 0;delay(1000); led =1; delay(1000);
+ 198   1              printf("AT+RST\r\n");
+ 199   1              led = 0;                                                                // reset module
+ 200   1              if(!check()) goto start;
+ 201   1              led     = 1;
+ 202   1              delay(1000);
+ 203   1              printf("AT+CWJAP=\"ATT409\",\"5654665991\"\r\n");         //nhap pass wifi
+ 204   1              led = 0;
+ 205   1              if(!check()) goto start;
+ 206   1              led = 1;
+ 207   1              delay(1000);
+ 208   1              while(1)
+ 209   1              {
+ 210   2                      ReadTemp();
+ 211   2                      printf("AT+CIPSTART=\"TCP\",\"192.168.0.111\",80\r\n");
+ 212   2                      led = 0;                                                
+ 213   2                      if(!check()) goto start;
+ 214   2                      led     = 1;
+ 215   2                      delay(1000);
+ 216   2                      printf("AT+CIPSEND=52\r\n");
+ 217   2                      led = 0;                                                
+ 218   2                      if(!check_s()) goto start;
+ 219   2                      led     = 1;
+ 220   2                      delay(1000);
+ 221   2                      printf("GET /g.php?t=%d HTTP/1.1\r\nHost: 192.168.0.111\r\n\r\n",temp);
+ 222   2                      led = 0;                                                
+ 223   2                      if(!check()) goto start;
+ 224   2                      led     = 1;
+ 225   2                      delay(1000);
+ 226   2              }
+ 227   1      }
+ 228          
+ 229          
+ 230          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    882    ----
+   CONSTANT SIZE    =    147    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     21    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       1
+   EDATA SIZE       =   ----    ----
+C51 COMPILER V9.01   CODE                                                                  02/14/2019 20:02:15 PAGE 5   
+
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
